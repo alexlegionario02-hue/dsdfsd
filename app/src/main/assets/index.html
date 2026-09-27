@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Cellflow — Meditative Voronoi Puzzle</title>
+  <script src="d3-delaunay.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-card: rgba(18, 24, 34, 0.78);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --text-main: #f0f4f8;
+      --text-muted: #8a99ad;
+      --accent-glow: rgba(165, 148, 249, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-dark);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      color: var(--text-main);
+      touch-action: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      background: radial-gradient(circle at 50% 20%, #151d2a 0%, #0a0e14 100%);
+      padding: env(safe-area-inset-top, 14px) env(safe-area-inset-right, 14px) env(safe-area-inset-bottom, 14px) env(safe-area-inset-left, 14px);
+    }
+
+    /* Top Navigation Header */
+    header {
+      width: 100%;
+      max-width: 580px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      z-index: 10;
+    }
+
+    .brand-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .level-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 3px;
+    }
+
+    .level-text {
+      font-size: 20px;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    .difficulty-tag {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      background: rgba(165, 148, 249, 0.14);
+      color: #c4b5fd;
+      letter-spacing: 0.4px;
+      border: 1px solid rgba(165, 148, 249, 0.3);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .difficulty-tag:hover, .difficulty-tag:active {
+      background: rgba(165, 148, 249, 0.28);
+      border-color: rgba(165, 148, 249, 0.55);
+      color: #fff;
+      transform: scale(1.03);
+    }
+
+    .controls-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .icon-btn:hover, .icon-btn:active {
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(30, 40, 56, 0.9);
+      transform: scale(1.05);
+    }
+
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    /* Board Area */
+    #board-wrapper {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      max-width: 580px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+
+    #board-inner {
+      position: relative;
+      width: min(88vw, 86vh, 520px);
+      height: min(88vw, 86vh, 520px);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      background: #0d121b;
+      touch-action: none;
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    /* Bottom Status & Flow Dots */
+    footer {
+      width: 100%;
+      max-width: 580px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 16px 14px;
+      z-index: 10;
+    }
+
+    .flow-metrics {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 380px;
+      font-size: 11px;
+      color: #7b8eab;
+      padding: 0 4px;
+    }
+
+    .flow-progress-bar {
+      width: 100%;
+      max-width: 380px;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 2px;
+    }
+
+    .flow-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #a594f9, #76c7b7);
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+
+    .pairs-tracker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 14px;
+      border-radius: 28px;
+      backdrop-filter: blur(12px);
+    }
+
+    .pair-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      opacity: 0.45;
+      padding: 2px 4px;
+    }
+
+    .pair-badge.connected {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+
+    .pair-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .pair-line {
+      width: 14px;
+      height: 3px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .hint-text {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.4px;
+      color: #6c7c93;
+      text-align: center;
+      min-height: 15px;
+      transition: color 0.3s;
+    }
+
+    /* Modal dialogs */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 8, 12, 0.8);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.32s ease;
+      padding: 20px;
+    }
+
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 420px;
+      background: #131923;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 26px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      transform: scale(0.92);
+      transition: transform 0.32s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    .modal-backdrop.active .modal-box {
+      transform: scale(1);
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    /* Difficulty Selection Cards */
+    .diff-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      margin-bottom: 18px;
+    }
+
+    .diff-opt-btn {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .diff-opt-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .diff-opt-btn.active {
+      border-color: #a594f9;
+      background: rgba(165, 148, 249, 0.14);
+      box-shadow: 0 0 14px rgba(165, 148, 249, 0.25);
+    }
+
+    .opt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 3px;
+    }
+
+    .opt-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .opt-badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #9cb3c9;
+    }
+
+    .opt-desc {
+      font-size: 12px;
+      color: #8da0b6;
+      line-height: 1.4;
+    }
+
+    .btn-action {
+      background: linear-gradient(135deg, #a594f9, #76c7b7);
+      color: #0c1017;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border: none;
+      padding: 11px 28px;
+      border-radius: 22px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      outline: none;
+      box-shadow: 0 4px 18px rgba(165, 148, 249, 0.35);
+    }
+
+    .btn-action:hover, .btn-action:active {
+      transform: scale(1.04);
+      box-shadow: 0 6px 24px rgba(165, 148, 249, 0.55);
+    }
+
+    .btn-subtle {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+      font-size: 13px;
+      padding: 9px 22px;
+      border-radius: 18px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .btn-subtle:hover {
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Level Selector Grid */
+    .level-tabs {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      margin-bottom: 14px;
+    }
+
+    .level-tab {
+      flex: 1;
+      padding: 8px 4px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: #8da0b6;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .level-tab.active {
+      background: rgba(165, 148, 249, 0.16);
+      border-color: #a594f9;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .level-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      max-height: 250px;
+      overflow-y: auto;
+      width: 100%;
+      padding: 2px;
+      margin-bottom: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .level-cell {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      font-size: 13px;
+      font-weight: 500;
+      color: #8da0b6;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .level-cell.unlocked {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .level-cell.completed {
+      background: rgba(118, 199, 183, 0.18);
+      border-color: rgba(118, 199, 183, 0.45);
+      color: #76c7b7;
+    }
+
+    .level-cell.current {
+      border-color: #a594f9;
+      box-shadow: 0 0 12px rgba(165, 148, 249, 0.45);
+      color: #a594f9;
+      font-weight: 700;
+    }
+
+    /* Subtle Loading Spinner */
+    #loader {
+      position: absolute;
+      inset: 0;
+      background: #0d121b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 20;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    #loader.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #a594f9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand-group">
+      <div class="app-title">Cellflow</div>
+      <div class="level-indicator">
+        <span class="level-text" id="level-title">Livello 1</span>
+        <button class="difficulty-tag" id="diff-tag" title="Seleziona intensità del puzzle">
+          <span id="diff-label">🌊 Stimolante</span>
+          <svg style="width:10px; height:10px; fill:currentColor;" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="controls-group">
+      <button class="icon-btn" id="sound-btn" title="Attiva/disattiva suoni rilassanti" aria-label="Audio">
+        <svg id="sound-icon-on" viewBox="0 0 24 24">
+          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+        </svg>
+        <svg id="sound-icon-off" viewBox="0 0 24 24" style="display:none;">
+          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="reset-btn" title="Azzera percorsi attuali" aria-label="Ricomincia">
+        <svg viewBox="0 0 24 24">
+          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="levels-btn" title="Seleziona livello" aria-label="Livelli">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Board Container -->
+  <main id="board-wrapper">
+    <div id="board-inner">
+      <canvas id="game-canvas"></canvas>
+      <div id="loader">
+        <div class="spinner"></div>
+        <div style="font-size: 13px; color: #8a99ad;">Armonizzazione celle...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer Flow Tracker -->
+  <footer>
+    <div class="flow-progress-bar">
+      <div class="flow-progress-fill" id="flow-progress-fill"></div>
+    </div>
+    <div class="flow-metrics">
+      <span id="coverage-cells">0/54 celle occupate</span>
+      <span id="coverage-percent">0% mappa</span>
+    </div>
+    <div class="pairs-tracker" id="pairs-tracker"></div>
+    <div class="hint-text" id="hint-text">Trascina per collegare le ancore dello stesso colore</div>
+  </footer>
+
+  <!-- Victory Dialog -->
+  <div class="modal-backdrop" id="win-modal">
+    <div class="modal-box">
+      <div style="font-size: 38px; margin-bottom: 8px;">✨</div>
+      <div class="modal-title">Armonia Raggiunta</div>
+      <div class="modal-subtitle" id="win-summary">Tutti i flussi scivolano fluidamente senza sovrapporsi.</div>
+      <button class="btn-action" id="next-lvl-btn">Prossimo Flusso</button>
+      <button class="btn-subtle" id="replay-btn">Rigioca Livello</button>
+    </div>
+  </div>
+
+  <!-- Difficulty Selector Modal -->
+  <div class="modal-backdrop" id="diff-modal">
+    <div class="modal-box">
+      <div class="modal-title">Difficoltà del Flusso</div>
+      <div class="modal-subtitle">Configura la complessità dei percorsi e la densità delle celle Voronoi.</div>
+      <div class="diff-options">
+        <button class="diff-opt-btn" data-mode="zen">
+          <div class="opt-header">
+            <span class="opt-title">🌿 Sereno (Relax)</span>
+            <span class="opt-badge">3-4 colori</span>
+          </div>
+          <div class="opt-desc">Percorsi dolci e aperti, ideale per un'esperienza meditativa rilassante.</div>
+        </button>
+        <button class="diff-opt-btn" data-mode="challenging">
+          <div class="opt-header">
+            <span class="opt-title">🌊 Stimolante (Bilanciato)</span>
+            <span class="opt-badge">4-5 colori</span>
+          </div>
+          <div class="opt-desc">Ancore distanti ai bordi opposti, percorsi lunghi 6-10 celle che richiedono logica e spazio.</div>
+        </button>
+        <button class="diff-opt-btn" data-mode="master">
+          <div class="opt-header">
+            <span class="opt-title">🔮 Labirinto (Master)</span>
+            <span class="opt-badge">5-6 colori</span>
+          </div>
+          <div class="opt-desc">Mappe dense da 60-75 celle, colli di bottiglia Voronoi e incastri intricati.</div>
+        </button>
+      </div>
+      <button class="btn-subtle" id="close-diff-btn">Chiudi</button>
+    </div>
+  </div>
+
+  <!-- Level Select Modal -->
+  <div class="modal-backdrop" id="levels-modal">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-title">Seleziona Flusso</div>
+      <div class="modal-subtitle">Scegli un livello da esplorare.</div>
+      <div class="level-tabs">
+        <button class="level-tab" data-filter="all">Tutti</button>
+        <button class="level-tab active" data-filter="mode">Modalità Attuale</button>
+      </div>
+      <div class="level-grid" id="level-grid"></div>
+      <button class="btn-subtle" id="close-levels-btn">Chiudi</button>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       CELLFLOW — Meditative Voronoi Puzzle Engine
+       Pure Client-Side HTML5 + Canvas + d3-delaunay + Procedural Audio
+       ========================================================================== */
+
+    // Peaceful Pastel Color Palettes for the Flow Lines
+    const PASTELS = [
+      {
+        id: 0,
+        name: 'Lilac',
+        main: '#A594F9',
+        light: '#D3C5FF',
+        fill: 'rgba(165, 148, 249, 0.45)',
+        cellGlow: 'rgba(165, 148, 249, 0.75)',
+        halo: 'rgba(165, 148, 249, 0.25)',
+        border: 'rgba(165, 148, 249, 0.85)',
+        freq: 261.63 // C4
+      },
+      {
+        id: 1,
+        name: 'Sage Sea',
+        main: '#48CAE4',
+        light: '#90E0EF',
+        fill: 'rgba(72, 202, 228, 0.45)',
+        cellGlow: 'rgba(72, 202, 228, 0.75)',
+        halo: 'rgba(72, 202, 228, 0.25)',
+        border: 'rgba(72, 202, 228, 0.85)',
+        freq: 293.66 // D4
+      },
+      {
+        id: 2,
+        name: 'Peach Sunset',
+        main: '#F4A261',
+        light: '#F9C784',
+        fill: 'rgba(244, 162, 97, 0.45)',
+        cellGlow: 'rgba(244, 162, 97, 0.75)',
+        halo: 'rgba(244, 162, 97, 0.25)',
+        border: 'rgba(244, 162, 97, 0.85)',
+        freq: 329.63 // E4
+      },
+      {
+        id: 3,
+        name: 'Mint Flora',
+        main: '#52B788',
+        light: '#95D5B2',
+        fill: 'rgba(82, 183, 136, 0.45)',
+        cellGlow: 'rgba(82, 183, 136, 0.75)',
+        halo: 'rgba(82, 183, 136, 0.25)',
+        border: 'rgba(82, 183, 136, 0.85)',
+        freq: 392.00 // G4
+      },
+      {
+        id: 4,
+        name: 'Rose Blossom',
+        main: '#F28482',
+        light: '#F8B4B3',
+        fill: 'rgba(242, 132, 130, 0.45)',
+        cellGlow: 'rgba(242, 132, 130, 0.75)',
+        halo: 'rgba(242, 132, 130, 0.25)',
+        border: 'rgba(242, 132, 130, 0.85)',
+        freq: 440.00 // A4
+      },
+      {
+        id: 5,
+        name: 'Golden Glow',
+        main: '#E9C46A',
+        light: '#F4E285',
+        fill: 'rgba(233, 196, 106, 0.45)',
+        cellGlow: 'rgba(233, 196, 106, 0.75)',
+        halo: 'rgba(233, 196, 106, 0.25)',
+        border: 'rgba(233, 196, 106, 0.85)',
+        freq: 523.25 // C5
+      }
+    ];
+
+    // PRNG for deterministic, reproducible levels
+    function mulberry32(seed) {
+      return function() {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // Centroid of a polygon
+    function polygonCentroid(poly) {
+      let area = 0, cx = 0, cy = 0;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        const cross = (xj * yi - xi * yj);
+        area += cross;
+        cx += (xi + xj) * cross;
+        cy += (yi + yj) * cross;
+      }
+      area = area * 0.5;
+      if (Math.abs(area) < 1e-5) return poly[0];
+      const factor = 1 / (6 * area);
+      return [cx * factor, cy * factor];
+    }
+
+    /* Meditative Sound Engine (Web Audio API) */
+    class AudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+        this.lastToneTime = 0;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playCellTone(colorIdx, stepInPath = 0) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        if (now - this.lastToneTime < 0.04) return;
+        this.lastToneTime = now;
+
+        const base = PASTELS[colorIdx % PASTELS.length].freq;
+        const freq = base * Math.pow(1.05946, (stepInPath % 10));
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.07, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.4);
+        osc.onended = () => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch (e) {}
+        };
+      }
+
+      playConnectedChord(colorIdx) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const base = PASTELS[colorIdx % PASTELS.length].freq;
+        const intervals = [1, 1.25, 1.5]; // Major chord resonance
+        const now = this.ctx.currentTime;
+
+        intervals.forEach((ratio, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(base * ratio, now + i * 0.05);
+
+          gain.gain.setValueAtTime(0.001, now + i * 0.05);
+          gain.gain.linearRampToValueAtTime(0.07, now + i * 0.05 + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.05 + 1.2);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(now + i * 0.05);
+          osc.stop(now + i * 0.05 + 1.25);
+        });
+      }
+
+      playWinSymphony() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+        const now = this.ctx.currentTime;
+        notes.forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.12);
+
+          gain.gain.setValueAtTime(0.001, now + i * 0.12);
+          gain.gain.linearRampToValueAtTime(0.08, now + i * 0.12 + 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 1.8);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(now + i * 0.12);
+          osc.stop(now + i * 0.12 + 1.9);
+        });
+      }
+    }
+
+    /* Game State & Puzzle Controller */
+    class CellflowGame {
+      constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.boardInner = document.getElementById('board-inner');
+        this.pairsTrackerEl = document.getElementById('pairs-tracker');
+        this.hintTextEl = document.getElementById('hint-text');
+        this.levelTitleEl = document.getElementById('level-title');
+        this.diffLabelEl = document.getElementById('diff-label');
+        this.coverageCellsEl = document.getElementById('coverage-cells');
+        this.coveragePercentEl = document.getElementById('coverage-percent');
+        this.flowProgressFillEl = document.getElementById('flow-progress-fill');
+        this.loaderEl = document.getElementById('loader');
+
+        this.audio = new AudioEngine();
+
+        this.currentLevel = 1;
+        this.currentMode = 'challenging'; // 'zen', 'challenging', 'master'
+        this.completedLevels = new Set();
+
+        this.levelData = null;
+        this.paths = [];
+        this.activeColor = null;
+        this.isPointerDown = false;
+        this.hoveredCell = -1;
+
+        this.fadeTimer = null;
+
+        // Storage load
+        this.loadProgress();
+
+        // Canvas sizing & setup
+        this.setupCanvas();
+        window.addEventListener('resize', () => this.setupCanvas());
+
+        // Setup interaction listeners
+        this.setupInteractions();
+        this.setupUIButtons();
+
+        // Load starting level
+        this.loadLevel(this.currentLevel);
+
+        // Animation render loop
+        this.render = this.render.bind(this);
+        requestAnimationFrame(this.render);
+      }
+
+      loadProgress() {
+        try {
+          const raw = localStorage.getItem('cellflow_progress_v2');
+          if (raw) {
+            const data = JSON.parse(raw);
+            if (data.currentLevel) this.currentLevel = data.currentLevel;
+            if (data.currentMode) this.currentMode = data.currentMode;
+            if (Array.isArray(data.completedLevels)) {
+              this.completedLevels = new Set(data.completedLevels);
+            }
+            if (data.sound !== undefined) {
+              this.audio.enabled = !!data.sound;
+              this.updateSoundIcon();
+            }
+          }
+        } catch (e) {
+          console.warn('Progress load fallback:', e);
+        }
+        this.updateModeUI();
+      }
+
+      saveProgress() {
+        try {
+          const data = {
+            currentLevel: this.currentLevel,
+            currentMode: this.currentMode,
+            completedLevels: Array.from(this.completedLevels),
+            sound: this.audio.enabled
+          };
+          localStorage.setItem('cellflow_progress_v2', JSON.stringify(data));
+        } catch (e) {}
+      }
+
+      updateModeUI() {
+        const labels = {
+          zen: '🌿 Sereno',
+          challenging: '🌊 Stimolante',
+          master: '🔮 Labirinto'
+        };
+        this.diffLabelEl.textContent = labels[this.currentMode] || '🌊 Stimolante';
+
+        // Update active class in difficulty modal
+        document.querySelectorAll('.diff-opt-btn').forEach(btn => {
+          if (btn.dataset.mode === this.currentMode) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+
+      updateSoundIcon() {
+        const on = document.getElementById('sound-icon-on');
+        const off = document.getElementById('sound-icon-off');
+        if (this.audio.enabled) {
+          on.style.display = 'block';
+          off.style.display = 'none';
+        } else {
+          on.style.display = 'none';
+          off.style.display = 'block';
+        }
+      }
+
+      setupCanvas() {
+        const rect = this.boardInner.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.dpr = dpr;
+        this.scale = rect.width / 800;
+      }
+
+      /* Robust & Challenging Level Generator */
+      generateLevel(levelIndex, mode = this.currentMode) {
+        // Tuning Parameters per Mode:
+        // - numColors: how many path pairs (3 to 6)
+        // - minPathLen / maxPathLen: forces paths to weave across several cells
+        // - minEuclidDist: guarantees physical separation across the canvas
+        // - numCells: Voronoi resolution
+        let numColors = 4;
+        let minPathLen = 5, maxPathLen = 9;
+        let minEuclidDist = 180;
+        let numCells = 52;
+
+        if (mode === 'zen') {
+          numColors = levelIndex <= 3 ? 3 : 4;
+          minPathLen = 4;
+          maxPathLen = 7;
+          minEuclidDist = 140;
+          numCells = 44 + Math.min(16, levelIndex * 2);
+        } else if (mode === 'challenging') {
+          numColors = levelIndex <= 2 ? 4 : (levelIndex <= 6 ? 5 : 6);
+          minPathLen = 5;
+          maxPathLen = 10;
+          minEuclidDist = 200;
+          numCells = 52 + Math.min(20, levelIndex * 2);
+        } else if (mode === 'master') {
+          numColors = levelIndex <= 2 ? 5 : 6;
+          minPathLen = 7;
+          maxPathLen = 12;
+          minEuclidDist = 240;
+          numCells = 58 + Math.min(22, levelIndex * 2);
+        }
+
+        const width = 800;
+        const height = 800;
+        const pad = 38;
+
+        let attempt = 0;
+        while (attempt < 150) {
+          const modeOffset = mode === 'master' ? 88888 : (mode === 'zen' ? 11111 : 44444);
+          const seed = (levelIndex * 19349663 + attempt * 1013904223 + modeOffset) >>> 0;
+          const rng = mulberry32(seed);
+
+          // 1. Scatter points
+          let points = [];
+          for (let i = 0; i < numCells; i++) {
+            points.push([
+              pad + rng() * (width - 2 * pad),
+              pad + rng() * (height - 2 * pad)
+            ]);
+          }
+
+          // 2. 2 iterations of Lloyd relaxation for harmonious, organic Voronoi cells
+          for (let it = 0; it < 2; it++) {
+            const flat = [];
+            for (const p of points) flat.push(p[0], p[1]);
+            const del = new d3.Delaunay(flat);
+            const vor = del.voronoi([pad, pad, width - pad, height - pad]);
+            const newPoints = [];
+            for (let i = 0; i < points.length; i++) {
+              const poly = vor.cellPolygon(i);
+              if (poly && poly.length >= 3) {
+                const c = polygonCentroid(poly);
+                newPoints.push([
+                  Math.max(pad, Math.min(width - pad, c[0])),
+                  Math.max(pad, Math.min(height - pad, c[1]))
+                ]);
+              } else {
+                newPoints.push(points[i]);
+              }
+            }
+            points = newPoints;
+          }
+
+          // Compute final Voronoi structure
+          const flat = [];
+          for (const p of points) flat.push(p[0], p[1]);
+          const delaunay = new d3.Delaunay(flat);
+          const voronoi = delaunay.voronoi([pad, pad, width - pad, height - pad]);
+
+          const neighbors = [];
+          const polygons = [];
+          const centroids = [];
+          for (let i = 0; i < points.length; i++) {
+            const poly = voronoi.cellPolygon(i);
+            polygons.push(poly);
+            centroids.push(poly ? polygonCentroid(poly) : points[i]);
+            neighbors.push(Array.from(voronoi.neighbors(i)));
+          }
+
+          // 3. Synthesize winding paths that intertwine without overlap
+          const cellOwner = new Int8Array(numCells).fill(-1);
+          const pairs = [];
+          let candidateSuccess = true;
+
+          for (let c = 0; c < numColors; c++) {
+            let start = -1;
+
+            for (let tryCount = 0; tryCount < 60; tryCount++) {
+              const cand = Math.floor(rng() * numCells);
+              if (cellOwner[cand] === -1) {
+                let minDistToOther = 999999;
+                for (const p of pairs) {
+                  const ptA = centroids[cand];
+                  const ptB = centroids[p.start];
+                  const d = Math.hypot(ptA[0] - ptB[0], ptA[1] - ptB[1]);
+                  if (d < minDistToOther) minDistToOther = d;
+                }
+                if (pairs.length === 0 || minDistToOther > 110) {
+                  start = cand;
+                  break;
+                }
+              }
+            }
+
+            if (start === -1) { candidateSuccess = false; break; }
+
+            const targetLength = minPathLen + Math.floor(rng() * (maxPathLen - minPathLen + 1));
+            let curr = start;
+            const path = [curr];
+            cellOwner[curr] = c;
+
+            for (let s = 0; s < targetLength; s++) {
+              const candidates = neighbors[curr].filter(n => cellOwner[n] === -1);
+              if (candidates.length === 0) break;
+
+              // Sort candidates to prefer cells with available branching room (avoids dead locks)
+              candidates.sort((a, b) => {
+                const degA = neighbors[a].filter(n => cellOwner[n] === -1).length;
+                const degB = neighbors[b].filter(n => cellOwner[n] === -1).length;
+                return (degB + (rng() - 0.5) * 2) - degA;
+              });
+
+              const next = candidates[0];
+              cellOwner[next] = c;
+              path.push(next);
+              curr = next;
+            }
+
+            if (path.length < minPathLen) {
+              candidateSuccess = false;
+              break;
+            }
+
+            // Verify minimum geometric distance between endpoints
+            const ptStart = centroids[path[0]];
+            const ptEnd = centroids[path[path.length - 1]];
+            const euclidDist = Math.hypot(ptStart[0] - ptEnd[0], ptStart[1] - ptEnd[1]);
+            if (euclidDist < minEuclidDist) {
+              candidateSuccess = false;
+              break;
+            }
+
+            pairs.push({
+              colorIndex: c,
+              start: path[0],
+              end: path[path.length - 1],
+              syntheticLen: path.length
+            });
+          }
+
+          if (!candidateSuccess) {
+            attempt++;
+            continue;
+          }
+
+          // 4. Validate with Backtracking Multi-Commodity Flow Solver
+          const solverResult = this.solveFlowGraph(neighbors, centroids, pairs, numCells);
+          if (solverResult.solvable) {
+            let totalPathLen = 0;
+            for (const p of solverResult.paths) totalPathLen += p.length;
+            const coveragePct = Math.round((totalPathLen / numCells) * 100);
+
+            return {
+              levelIndex,
+              mode,
+              numCells,
+              numColors,
+              points,
+              polygons,
+              centroids,
+              neighbors,
+              delaunay,
+              voronoi,
+              pairs,
+              expectedCoverage: coveragePct,
+              solPaths: solverResult.paths
+            };
+          }
+
+          attempt++;
+        }
+
+        return null;
+      }
+
+      /* Backtracking Solver with Heuristic Sorting & BFS Reachability Pruning */
+      solveFlowGraph(neighbors, centroids, pairs, numCells) {
+        const K = pairs.length;
+        const cellOwner = new Int8Array(numCells).fill(-1);
+        const isAnchor = new Int8Array(numCells).fill(-1);
+
+        for (let c = 0; c < K; c++) {
+          isAnchor[pairs[c].start] = c;
+          isAnchor[pairs[c].end] = c;
+          cellOwner[pairs[c].start] = c;
+        }
+
+        let searchSteps = 0;
+        const maxSteps = 4500;
+        const solutionPaths = [];
+
+        function isReachable(pairIdx) {
+          for (let c = pairIdx; c < K; c++) {
+            const target = pairs[c].end;
+            const currentHead = (solutionPaths[c] && solutionPaths[c].length > 0)
+              ? solutionPaths[c][solutionPaths[c].length - 1]
+              : pairs[c].start;
+
+            if (currentHead === target) continue;
+
+            const q = [currentHead];
+            const visited = new Uint8Array(numCells);
+            visited[currentHead] = 1;
+            let canReach = false;
+            let head = 0;
+
+            while (head < q.length) {
+              const u = q[head++];
+              if (u === target) {
+                canReach = true;
+                break;
+              }
+              for (const v of neighbors[u]) {
+                if (!visited[v] && (v === target || (cellOwner[v] === -1 && isAnchor[v] === -1))) {
+                  visited[v] = 1;
+                  q.push(v);
+                }
+              }
+            }
+            if (!canReach) return false;
+          }
+          return true;
+        }
+
+        function dfs(pairIdx, currentCell, currentPath) {
+          if (++searchSteps > maxSteps) return false;
+
+          const target = pairs[pairIdx].end;
+          if (currentCell === target) {
+            solutionPaths[pairIdx] = currentPath.slice();
+            if (pairIdx + 1 === K) return true; // All paths connected!
+            const nextStart = pairs[pairIdx + 1].start;
+            return dfs(pairIdx + 1, nextStart, [nextStart]);
+          }
+
+          if (!isReachable(pairIdx)) return false;
+
+          // Heuristic: prioritize neighbors closer to target
+          const cands = neighbors[currentCell].slice();
+          cands.sort((a, b) => {
+            const dA = Math.hypot(centroids[a][0] - centroids[target][0], centroids[a][1] - centroids[target][1]);
+            const dB = Math.hypot(centroids[b][0] - centroids[target][0], centroids[b][1] - centroids[target][1]);
+            return dA - dB;
+          });
+
+          for (const v of cands) {
+            if (v === target) {
+              currentPath.push(v);
+              cellOwner[v] = pairIdx;
+              if (dfs(pairIdx, v, currentPath)) return true;
+              cellOwner[v] = -1;
+              currentPath.pop();
+            } else if (cellOwner[v] === -1 && isAnchor[v] === -1) {
+              cellOwner[v] = pairIdx;
+              currentPath.push(v);
+              if (dfs(pairIdx, v, currentPath)) return true;
+              cellOwner[v] = -1;
+              currentPath.pop();
+            }
+          }
+          return false;
+        }
+
+        const solvable = dfs(0, pairs[0].start, [pairs[0].start]);
+        return { solvable, paths: solutionPaths };
+      }
+
+      loadLevel(levelIndex) {
+        this.loaderEl.classList.add('active');
+        setTimeout(() => {
+          this.currentLevel = levelIndex;
+          this.levelData = this.generateLevel(levelIndex, this.currentMode);
+          if (!this.levelData) {
+            console.error('Could not generate level', levelIndex);
+            this.loaderEl.classList.remove('active');
+            return;
+          }
+
+          this.paths = this.levelData.pairs.map(() => []);
+          this.activeColor = null;
+          this.isPointerDown = false;
+
+          // Update UI
+          this.levelTitleEl.textContent = `Livello ${this.currentLevel}`;
+          this.updateModeUI();
+          this.renderPairsTracker();
+          this.updateMetrics();
+          this.updateHintText('Collega ciascuna coppia di ancore senza intersecare altri flussi');
+
+          this.loaderEl.classList.remove('active');
+          this.saveProgress();
+        }, 30);
+      }
+
+      updateMetrics() {
+        if (!this.levelData) return;
+        const totalBoardCells = this.levelData.numCells;
+        const usedCells = new Set();
+        this.paths.forEach(p => {
+          p.forEach(cell => usedCells.add(cell));
+        });
+
+        const count = usedCells.size;
+        const pct = Math.round((count / totalBoardCells) * 100);
+
+        this.coverageCellsEl.textContent = `${count}/${totalBoardCells} celle connesse`;
+        this.coveragePercentEl.textContent = `${pct}% mappa`;
+        this.flowProgressFillEl.style.width = `${pct}%`;
+      }
+
+      renderPairsTracker() {
+        this.pairsTrackerEl.innerHTML = '';
+        if (!this.levelData) return;
+
+        this.levelData.pairs.forEach((pair, idx) => {
+          const pastel = PASTELS[pair.colorIndex % PASTELS.length];
+          const isComplete = this.isPathComplete(idx);
+
+          const badge = document.createElement('div');
+          badge.className = `pair-badge ${isComplete ? 'connected' : ''}`;
+          badge.style.color = pastel.main;
+          badge.title = `${pastel.name}: ${isComplete ? 'Flusso Connesso' : 'In cerca di via'}`;
+
+          const dot1 = document.createElement('div');
+          dot1.className = 'pair-dot';
+          dot1.style.backgroundColor = pastel.main;
+
+          const line = document.createElement('div');
+          line.className = 'pair-line';
+          line.style.opacity = isComplete ? '1' : '0.35';
+
+          const dot2 = document.createElement('div');
+          dot2.className = 'pair-dot';
+          dot2.style.backgroundColor = pastel.main;
+
+          badge.appendChild(dot1);
+          badge.appendChild(line);
+          badge.appendChild(dot2);
+
+          // Clicking badge clears this color path
+          badge.addEventListener('click', () => {
+            if (this.paths[idx].length > 0) {
+              this.paths[idx] = [];
+              this.renderPairsTracker();
+              this.updateMetrics();
+            }
+          });
+
+          this.pairsTrackerEl.appendChild(badge);
+        });
+      }
+
+      updateHintText(text) {
+        this.hintTextEl.textContent = text;
+      }
+
+      isPathComplete(colorIdx) {
+        const path = this.paths[colorIdx];
+        if (!path || path.length < 2) return false;
+        const pair = this.levelData.pairs[colorIdx];
+        const start = path[0];
+        const end = path[path.length - 1];
+        return (start === pair.start && end === pair.end) || (start === pair.end && end === pair.start);
+      }
+
+      /* High-Precision Touch & Pointer Interaction with Zero Latency */
+      setupInteractions() {
+        let cachedRect = null;
+        const updateRect = () => {
+          cachedRect = this.canvas.getBoundingClientRect();
+        };
+        updateRect();
+        window.addEventListener('resize', updateRect);
+        window.addEventListener('orientationchange', updateRect);
+
+        const getCoord = (e) => {
+          if (!cachedRect) updateRect();
+          const scaleX = 800 / cachedRect.width;
+          const scaleY = 800 / cachedRect.height;
+          return {
+            x: Math.max(0, Math.min(800, (e.clientX - cachedRect.left) * scaleX)),
+            y: Math.max(0, Math.min(800, (e.clientY - cachedRect.top) * scaleY))
+          };
+        };
+
+        const onPointerDown = (e) => {
+          e.preventDefault();
+          updateRect();
+          if (this.canvas.setPointerCapture) {
+            try { this.canvas.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          this.audio.init();
+
+          const pos = getCoord(e);
+          const cell = this.findCellAt(pos.x, pos.y);
+          if (cell === -1 || !this.levelData) return;
+
+          this.isPointerDown = true;
+          this.hoveredCell = cell;
+
+          // Check if clicked an anchor
+          const anchorPairIdx = this.levelData.pairs.findIndex(p => p.start === cell || p.end === cell);
+          if (anchorPairIdx !== -1) {
+            this.activeColor = anchorPairIdx;
+            this.paths[this.activeColor] = [cell];
+            this.audio.playCellTone(this.activeColor, 0);
+            this.renderPairsTracker();
+            this.updateMetrics();
+            return;
+          }
+
+          // Check if clicked inside an existing path
+          for (let c = 0; c < this.paths.length; c++) {
+            const idxInPath = this.paths[c].indexOf(cell);
+            if (idxInPath !== -1) {
+              this.activeColor = c;
+              this.paths[c] = this.paths[c].slice(0, idxInPath + 1);
+              this.audio.playCellTone(this.activeColor, idxInPath);
+              this.renderPairsTracker();
+              this.updateMetrics();
+              return;
+            }
+          }
+        };
+
+        const onPointerMove = (e) => {
+          if (!this.isPointerDown || this.activeColor === null || !this.levelData) return;
+          const pos = getCoord(e);
+          const cell = this.findCellAt(pos.x, pos.y);
+          if (cell === -1) return;
+          this.hoveredCell = cell;
+
+          const currentPath = this.paths[this.activeColor];
+          if (currentPath.length === 0) return;
+
+          const head = currentPath[currentPath.length - 1];
+          if (cell === head) return;
+
+          // 1. Backtracking check
+          if (currentPath.length >= 2 && currentPath[currentPath.length - 2] === cell) {
+            currentPath.pop();
+            this.audio.playCellTone(this.activeColor, currentPath.length);
+            this.renderPairsTracker();
+            this.updateMetrics();
+            return;
+          }
+
+          // 2. Must be adjacent neighbor of head
+          const neighbors = this.levelData.neighbors[head];
+          if (!neighbors || !neighbors.includes(cell)) return;
+
+          // 3. Cannot reuse cells already in this path
+          if (currentPath.includes(cell)) return;
+
+          // 4. Cannot cross other color paths
+          for (let c = 0; c < this.paths.length; c++) {
+            if (c !== this.activeColor && this.paths[c].includes(cell)) {
+              return;
+            }
+          }
+
+          // 5. Cannot step onto anchors of other colors
+          for (let c = 0; c < this.levelData.pairs.length; c++) {
+            if (c !== this.activeColor) {
+              if (this.levelData.pairs[c].start === cell || this.levelData.pairs[c].end === cell) {
+                return;
+              }
+            }
+          }
+
+          const targetPair = this.levelData.pairs[this.activeColor];
+          const isTargetAnchor = (currentPath[0] === targetPair.start && cell === targetPair.end) ||
+                                 (currentPath[0] === targetPair.end && cell === targetPair.start);
+
+          // Add cell to path immediately
+          currentPath.push(cell);
+          this.audio.playCellTone(this.activeColor, currentPath.length);
+          this.updateMetrics();
+
+          if (isTargetAnchor) {
+            this.audio.playConnectedChord(this.activeColor);
+            this.renderPairsTracker();
+            this.checkWinCondition();
+            this.isPointerDown = false;
+            this.activeColor = null;
+          } else {
+            this.renderPairsTracker();
+          }
+        };
+
+        const onPointerUp = (e) => {
+          if (this.canvas.releasePointerCapture && e && e.pointerId) {
+            try { this.canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+          }
+          this.isPointerDown = false;
+          this.activeColor = null;
+        };
+
+        this.canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+        this.canvas.addEventListener('pointermove', onPointerMove, { passive: false });
+        this.canvas.addEventListener('pointerup', onPointerUp, { passive: false });
+        this.canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+      }
+
+      findCellAt(x, y) {
+        if (!this.levelData || !this.levelData.delaunay) return -1;
+        const cell = this.levelData.delaunay.find(x, y);
+        const poly = this.levelData.polygons[cell];
+        if (!poly) return -1;
+        return cell;
+      }
+
+      checkWinCondition() {
+        if (!this.levelData) return;
+        const allConnected = this.levelData.pairs.every((_, idx) => this.isPathComplete(idx));
+
+        if (allConnected) {
+          const key = `${this.currentMode}_${this.currentLevel}`;
+          this.completedLevels.add(key);
+          this.saveProgress();
+          this.audio.playWinSymphony();
+
+          const totalCells = this.levelData.numCells;
+          const used = new Set();
+          this.paths.forEach(p => p.forEach(c => used.add(c)));
+          const coveragePct = Math.round((used.size / totalCells) * 100);
+
+          document.getElementById('win-summary').textContent =
+            `Tutti i ${this.levelData.pairs.length} flussi connessi con successo! Copertura mappa: ${coveragePct}%.`;
+
+          setTimeout(() => {
+            document.getElementById('win-modal').classList.add('active');
+          }, 450);
+        }
+      }
+
+      setupUIButtons() {
+        // Difficulty Modal & Trigger
+        const diffTag = document.getElementById('diff-tag');
+        const diffModal = document.getElementById('diff-modal');
+        const closeDiffBtn = document.getElementById('close-diff-btn');
+
+        diffTag.addEventListener('click', () => {
+          diffModal.classList.add('active');
+        });
+
+        closeDiffBtn.addEventListener('click', () => {
+          diffModal.classList.remove('active');
+        });
+
+        document.querySelectorAll('.diff-opt-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const chosen = btn.dataset.mode;
+            if (chosen && chosen !== this.currentMode) {
+              this.currentMode = chosen;
+              this.updateModeUI();
+              this.saveProgress();
+              diffModal.classList.remove('active');
+              this.loadLevel(this.currentLevel);
+            } else {
+              diffModal.classList.remove('active');
+            }
+          });
+        });
+
+        // Sound button
+        const soundBtn = document.getElementById('sound-btn');
+        soundBtn.addEventListener('click', () => {
+          this.audio.enabled = !this.audio.enabled;
+          this.audio.init();
+          this.updateSoundIcon();
+          this.saveProgress();
+        });
+
+        // Reset button
+        const resetBtn = document.getElementById('reset-btn');
+        resetBtn.addEventListener('click', () => {
+          this.paths = this.levelData.pairs.map(() => []);
+          this.renderPairsTracker();
+          this.updateMetrics();
+          this.updateHintText('Percorsi azzerati. Riconnettiti con calma.');
+        });
+
+        // Next Level button
+        document.getElementById('next-lvl-btn').addEventListener('click', () => {
+          document.getElementById('win-modal').classList.remove('active');
+          this.loadLevel(this.currentLevel + 1);
+        });
+
+        // Replay button
+        document.getElementById('replay-btn').addEventListener('click', () => {
+          document.getElementById('win-modal').classList.remove('active');
+          this.loadLevel(this.currentLevel);
+        });
+
+        // Level Select Modal
+        const levelsBtn = document.getElementById('levels-btn');
+        const levelsModal = document.getElementById('levels-modal');
+        const levelGrid = document.getElementById('level-grid');
+
+        const populateLevelGrid = () => {
+          levelGrid.innerHTML = '';
+          const maxLevel = Math.max(30, this.currentLevel + 8);
+          for (let lvl = 1; lvl <= maxLevel; lvl++) {
+            const cell = document.createElement('div');
+            cell.className = 'level-cell';
+            cell.textContent = lvl;
+
+            const isCurrent = lvl === this.currentLevel;
+            const isCompleted = this.completedLevels.has(`${this.currentMode}_${lvl}`) || this.completedLevels.has(lvl);
+
+            if (isCurrent) cell.classList.add('current');
+            if (isCompleted) cell.classList.add('completed');
+            cell.classList.add('unlocked');
+
+            cell.addEventListener('click', () => {
+              levelsModal.classList.remove('active');
+              this.loadLevel(lvl);
+            });
+
+            levelGrid.appendChild(cell);
+          }
+        };
+
+        levelsBtn.addEventListener('click', () => {
+          populateLevelGrid();
+          levelsModal.classList.add('active');
+        });
+
+        document.getElementById('close-levels-btn').addEventListener('click', () => {
+          levelsModal.classList.remove('active');
+        });
+      }
+
+      /* Canvas Rendering Loop — 60/120 FPS Native Performance */
+      render() {
+        const ctx = this.ctx;
+        const dpr = this.dpr;
+        const scale = this.scale * dpr;
+
+        ctx.save();
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.scale(scale, scale);
+
+        if (this.levelData) {
+          const { polygons, centroids, pairs } = this.levelData;
+
+          const cellColorMap = new Map();
+          for (let c = 0; c < this.paths.length; c++) {
+            for (const cellIdx of this.paths[c]) {
+              cellColorMap.set(cellIdx, c);
+            }
+          }
+
+          // 1. Draw Voronoi Cells (Polygons)
+          for (let i = 0; i < polygons.length; i++) {
+            const poly = polygons[i];
+            if (!poly || poly.length < 3) continue;
+
+            ctx.beginPath();
+            ctx.moveTo(poly[0][0], poly[0][1]);
+            for (let j = 1; j < poly.length; j++) {
+              ctx.lineTo(poly[j][0], poly[j][1]);
+            }
+            ctx.closePath();
+
+            let isAnchor = false;
+            let anchorColor = -1;
+            for (let c = 0; c < pairs.length; c++) {
+              if (pairs[c].start === i || pairs[c].end === i) {
+                isAnchor = true;
+                anchorColor = c;
+                break;
+              }
+            }
+
+            const pathColor = cellColorMap.get(i);
+
+            if (pathColor !== undefined) {
+              const pastel = PASTELS[pairs[pathColor].colorIndex % PASTELS.length];
+              ctx.fillStyle = pastel.fill;
+              ctx.fill();
+
+              ctx.strokeStyle = pastel.border;
+              ctx.lineWidth = 1.8;
+              ctx.stroke();
+            } else if (isAnchor) {
+              const pastel = PASTELS[pairs[anchorColor].colorIndex % PASTELS.length];
+              ctx.fillStyle = pastel.halo;
+              ctx.fill();
+
+              ctx.strokeStyle = pastel.border;
+              ctx.lineWidth = 1.6;
+              ctx.stroke();
+            } else {
+              if (this.hoveredCell === i && this.isPointerDown) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+              } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.024)';
+              }
+              ctx.fill();
+
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
+              ctx.lineWidth = 1.0;
+              ctx.stroke();
+            }
+          }
+
+          // 2. Draw Smooth Continuous Flow Lines along Paths (Ultra-smooth multi-pass strokes)
+          for (let c = 0; c < this.paths.length; c++) {
+            const path = this.paths[c];
+            if (path.length < 2) continue;
+
+            const pastel = PASTELS[pairs[c].colorIndex % PASTELS.length];
+
+            // Build curved path
+            ctx.beginPath();
+            const first = centroids[path[0]];
+            ctx.moveTo(first[0], first[1]);
+
+            for (let k = 1; k < path.length; k++) {
+              const curr = centroids[path[k]];
+              if (k < path.length - 1) {
+                const next = centroids[path[k + 1]];
+                const mx = (curr[0] + next[0]) / 2;
+                const my = (curr[1] + next[1]) / 2;
+                ctx.quadraticCurveTo(curr[0], curr[1], mx, my);
+              } else {
+                ctx.lineTo(curr[0], curr[1]);
+              }
+            }
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Pass 1: Wide soft halo
+            ctx.strokeStyle = pastel.halo;
+            ctx.lineWidth = 14;
+            ctx.stroke();
+
+            // Pass 2: Main vibrant color
+            ctx.strokeStyle = pastel.main;
+            ctx.lineWidth = 6.5;
+            ctx.stroke();
+
+            // Pass 3: Crisp luminous center
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.stroke();
+
+            // Flow nodes
+            for (let k = 0; k < path.length; k++) {
+              const pt = centroids[path[k]];
+              ctx.beginPath();
+              ctx.arc(pt[0], pt[1], 4.2, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+            }
+          }
+
+          // 3. Draw Colored Anchors (Concentric rings for smooth high-fps rendering)
+          const time = Date.now() * 0.003;
+          pairs.forEach((pair, c) => {
+            const pastel = PASTELS[pair.colorIndex % PASTELS.length];
+            const isComplete = this.isPathComplete(c);
+            const pulse = Math.sin(time + c * 1.5) * 2;
+
+            [pair.start, pair.end].forEach(anchorCell => {
+              const center = centroids[anchorCell];
+              if (!center) return;
+
+              // Outer aura ring
+              ctx.beginPath();
+              ctx.arc(center[0], center[1], 18 + pulse, 0, Math.PI * 2);
+              ctx.strokeStyle = pastel.main;
+              ctx.lineWidth = isComplete ? 2.5 : 1.5;
+              ctx.globalAlpha = isComplete ? 0.85 : 0.45;
+              ctx.stroke();
+              ctx.globalAlpha = 1.0;
+
+              // Soft aura disk
+              ctx.beginPath();
+              ctx.arc(center[0], center[1], 13.5, 0, Math.PI * 2);
+              ctx.fillStyle = pastel.halo;
+              ctx.fill();
+
+              // Anchor Orb
+              ctx.beginPath();
+              ctx.arc(center[0], center[1], 10, 0, Math.PI * 2);
+              ctx.fillStyle = pastel.main;
+              ctx.fill();
+
+              // Inner luminous core
+              ctx.beginPath();
+              ctx.arc(center[0], center[1], 4.2, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+            });
+          });
+        }
+
+        ctx.restore();
+        requestAnimationFrame(this.render);
+      }
+    }
+
+    // Initialize once DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+      window.game = new CellflowGame();
+    });
+  </script>
+</body>
+</html>

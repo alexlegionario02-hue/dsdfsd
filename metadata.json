@@ -1,0 +1,6 @@
+{
+  "name": "Cellflow",
+  "description": "A meditative puzzle game based on organic Voronoi cell maps with flow path connections.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
